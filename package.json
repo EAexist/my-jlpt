@@ -1,0 +1,13 @@
+{
+  "name": "my-jlpt-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Root workspace — test worker and tooling only",
+  "scripts": {
+    "test-worker": "node scripts/test-worker.mjs"
+  },
+  "devDependencies": {
+    "chokidar": "^3.6.0"
+  }
+}

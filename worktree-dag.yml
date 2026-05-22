@@ -1,0 +1,116 @@
+version: "1.0"
+project: "my-jlpt"
+description: "Multi-agent parallel development worktree DAG for my-jlpt"
+
+worktrees:
+  # - id: bootstrap
+  #   phase: 1
+  #   frontend: true
+  #   backend: true
+  #   description: "Project scaffolding, shared types, and API contracts"
+  #   tasks:
+  #     frontend:
+  #       - "Next.js frontend skeleton with App Router and TypeScript"
+  #       - "Auth.js v5 configuration skeleton"
+  #       - "Define lib/api.ts client shell & types/api.ts from OpenAPI spec"
+  #     backend:
+  #       - "NestJS backend skeleton with TypeScript"
+  #       - "PostgreSQL database schema setup with Prisma"
+  #       - "Apply openapi.yaml schema fixes if needed"
+  #   dependencies: []
+
+  - id: auth
+    phase: 2
+    frontend: true
+    backend: true
+    description: "Authentication layer (End-to-End)"
+    tasks:
+      frontend:
+        - "Auth.js v5 session provider, middleware, login page layout"
+      backend:
+        - "Google OAuth + JWT generation and issuance"
+    dependencies:
+      - bootstrap
+
+  - id: nlp-pipeline
+    phase: 2
+    frontend: false
+    backend: true
+    description: "Core backend text-processing pipeline"
+    tasks:
+      backend:
+        - "Sentence segmentation engine"
+        - "JLPT dictionary RAG lookup routine"
+        - "Grammar pattern matching engine"
+        - "LLM batch call orchestration & output structuring"
+    dependencies:
+      - bootstrap
+
+  - id: input-ui
+    phase: 2
+    frontend: true
+    backend: false
+    description: "Frontend content ingestion interface (Contract Mocked)"
+    tasks:
+      frontend:
+      - "Build /content/new route"
+      - "Implement InputForm & FileUpload components"
+      - "Create useContentSubmit hook targeting lib/api.ts contract"
+    dependencies:
+      - bootstrap
+
+  - id: dashboard-ui
+    phase: 2
+    frontend: true
+    backend: false
+    description: "Frontend main dashboard interface (Contract Mocked)"
+    tasks:
+      frontend:
+      - "Build /dashboard route"
+      - "Create ContentCard UI with loading, processing, and error states"
+      - "Implement useJobStream SSE hook pattern via mocked contract"
+    dependencies:
+      - bootstrap
+      - auth
+
+  # - id: study-ui
+  #   phase: 3
+  #   frontend: true
+  #   backend: false
+  #   description: "Frontend core learning interface (Contract Mocked)"
+  #   tasks:
+  #     frontend:
+  #     - "Build /content/[content_id] dynamic route"
+  #     - "Implement StudyView workspace container"
+  #     - "Create SentenceCard, VocabHighlight, and VocabPanel components"
+  #     - "Implement LevelBadge, LevelDistribution, and inline title auto-save"
+  #   dependencies:
+  #     - bootstrap
+  #     - dashboard-ui
+
+  # - id: job-api
+  #   phase: 3
+  #   frontend: false
+  #   backend: true
+  #   description: "Backend asynchronous processing endpoints"
+  #   tasks:
+  #     backend:
+  #       - "Expose POST /jobs endpoint protected by JWT guard"
+  #       - "Implement background task runner worker"
+  #       - "Expose GET /jobs/{id}/stream SSE streaming endpoint"
+  #   dependencies:
+  #     - auth
+  #     - nlp-pipeline
+
+  # - id: content-api
+  #   phase: 3
+  #   frontend: false
+  #   backend: true
+  #   description: "Backend content management CRUD endpoints"
+  #   tasks:
+  #     backend:
+  #       - "Expose GET/PATCH/DELETE /content/{id} routes"
+  #       - "Expose GET /content paginated list route"
+  #   dependencies:
+  #     - auth
+  #     - nlp-pipeline

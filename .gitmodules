@@ -1,0 +1,9 @@
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/EAexist/my-jlpt-frontend.git
+[submodule "backend"]
+	path = backend
+	url = https://github.com/EAexist/my-jlpt-backend.git
+[submodule "worktree-agent-manager"]
+	path = worktree-agent-manager
+	url = https://github.com/EAexist/worktree-agent-manager.git

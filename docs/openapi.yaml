@@ -1,0 +1,385 @@
+openapi: "3.1.0"
+info:
+  title: my-jlpt API
+  version: "1.0.0"
+  description: |
+    Backend API for my-jlpt.
+    Japanese text input → AI-powered JLPT learning content generator.
+
+    ## Auth
+    All protected endpoints require: `Authorization: Bearer <jwt>`
+    JWT is issued after Google OAuth 2.0 callback.
+
+    ## Errors
+    All error responses follow the shape: `{ "detail": "string" }`
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.my-jlpt.com
+    description: Production
+
+tags:
+  - name: health
+    description: Service health check
+  - name: auth
+    description: Google OAuth 2.0 login and session
+  - name: content
+    description: JLPT analysis content — create, list, retrieve, delete
+
+paths:
+
+  # --- Health ---------------------------------------------------------------
+
+  /health:
+    get:
+      operationId: getHealth
+      tags: [health]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # --- Auth -----------------------------------------------------------------
+
+  /auth/google:
+    get:
+      operationId: googleOAuthRedirect
+      tags: [auth]
+      summary: Redirect browser to Google OAuth consent screen
+      security: []
+      responses:
+        "302":
+          description: Redirect to Google consent URL
+
+  /auth/google/callback:
+    get:
+      operationId: googleOAuthCallback
+      tags: [auth]
+      summary: |
+        Google redirects here with ?code=.
+        Backend exchanges code, upserts user, issues JWT,
+        then redirects to frontend with token.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to {FRONTEND_URL}/auth/callback?access_token=<jwt>
+        "400":
+          description: Missing or invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # --- Content --------------------------------------------------------------
+
+  /content:
+    post:
+      operationId: createContent
+      tags: [content]
+      summary: |
+        Analyze Japanese text via LLM and persist the result.
+        LLM call is server-side only — client never calls LLM directly.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContentRequest"
+      responses:
+        "201":
+          description: Analysis complete and content saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentFull"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: text is empty or exceeds max length
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "504":
+          description: LLM API timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      operationId: listContent
+      tags: [content]
+      summary: |
+        List all content owned by the authenticated user.
+        Ordered by created_at descending.
+        Does NOT include sentences or vocabulary — list view only.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of content summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContentSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /content/{id}:
+    get:
+      operationId: getContent
+      tags: [content]
+      summary: Retrieve full content for re-opening a saved study set
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Full content object including sentences and vocabulary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentFull"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteContent
+      tags: [content]
+      summary: Delete content. Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "204":
+          description: Deleted successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ---------------------------------------------------------------------------
+# COMPONENTS
+# ---------------------------------------------------------------------------
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+      required: [detail]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+      required: [id, email, display_name]
+
+    JLPTLevel:
+      type: string
+      enum: [N1, N2, N3, N4, N5]
+
+    LevelDistribution:
+      type: object
+      description: Count of words/sentences per JLPT level
+      properties:
+        N1: { type: integer }
+        N2: { type: integer }
+        N3: { type: integer }
+        N4: { type: integer }
+        N5: { type: integer }
+      required: [N1, N2, N3, N4, N5]
+
+    Sentence:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Original Japanese sentence
+        translation:
+          type: string
+          description: Korean or English translation
+        level:
+          $ref: "#/components/schemas/JLPTLevel"
+        grammar_points:
+          type: array
+          items:
+            type: string
+          description: Grammar patterns identified in the sentence
+        similar_patterns:
+          type: array
+          items:
+            type: string
+          description: JLPT-frequent patterns similar to this sentence
+      required: [text, translation, level, grammar_points, similar_patterns]
+
+    VocabularyItem:
+      type: object
+      properties:
+        word:
+          type: string
+          description: The Japanese word (kanji form if applicable)
+        reading:
+          type: string
+          description: Hiragana/katakana reading
+        level:
+          $ref: "#/components/schemas/JLPTLevel"
+        translation:
+          type: string
+          description: Korean or English meaning
+        synonyms:
+          type: array
+          items:
+            type: string
+          description: JLPT-frequent synonyms
+        example_phrases:
+          type: array
+          items:
+            type: string
+          description: Example phrases using the word
+      required: [word, reading, level, translation, synonyms, example_phrases]
+
+    ContentSummary:
+      type: object
+      description: Lightweight content object for list view — no sentences or vocabulary
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        input_text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        overall_level:
+          $ref: "#/components/schemas/JLPTLevel"
+        level_distribution:
+          $ref: "#/components/schemas/LevelDistribution"
+      required: [id, title, input_text, created_at, overall_level, level_distribution]
+
+    ContentFull:
+      allOf:
+        - $ref: "#/components/schemas/ContentSummary"
+        - type: object
+          properties:
+            sentences:
+              type: array
+              items:
+                $ref: "#/components/schemas/Sentence"
+            vocabulary:
+              type: array
+              items:
+                $ref: "#/components/schemas/VocabularyItem"
+          required: [sentences, vocabulary]
+
+    CreateContentRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Japanese input text
+          minLength: 1
+          maxLength: 5000
+        title:
+          type: string
+          nullable: true
+          description: Optional. Auto-generated from first line if omitted.
+      required: [text]
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          example:
+            detail: "Not authenticated"
+
+    Forbidden:
+      description: Authenticated but not the owner of this resource
+      content:
+        application/json:
+          example:
+            detail: "Access forbidden"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          example:
+            detail: "Not found"
